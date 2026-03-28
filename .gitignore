@@ -1,1 +1,26 @@
 .DS_Store
+
+# Local environments and secrets
+.env
+.env.*
+
+# Logs
+logs/
+**/*.log
+
+# Data and exports
+data/
+exports/
+export/
+
+# Binaries and archives
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+
+*.zip
+*.tar
+*.tar.gz
+*.7z

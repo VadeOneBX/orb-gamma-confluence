@@ -1,0 +1,19 @@
+---
+description: Repository treated as a historical research artifact; documentation-first, non-operational scope.
+alwaysApply: true
+---
+
+# Global architecture
+
+This repository is a **historical research artifact**. Its purpose is to preserve documentation, analysis, and related materials—not to host a runnable product or live system.
+
+## Principles
+
+- **Documentation-first**: Prefer explaining, organizing, and annotating written material over introducing behavior, automation, or new execution paths.
+- **No execution or automation**: Do not add scripts, jobs, pipelines, or agent workflows whose role is to run the subject system, refresh datasets, or operate environments on a schedule.
+- **Stable boundary**: Treat the tree as archival context; avoid reframing it as something to deploy, trade with, or operate in production.
+
+## Assistant expectations
+
+- Interpret and document; do not operationalize the repository by default.
+- When editing, favor prose, structure, and careful citations over new entrypoints meant to execute or automate work.

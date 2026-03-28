@@ -1,0 +1,20 @@
+---
+description: Safety and scope for offline research use; respect excluded payloads and non-operational posture.
+alwaysApply: true
+---
+
+# Research safety
+
+## Framing
+
+Work here is **offline, non-operational research**. Nothing in the repository should be read as a directive to connect to external services, move funds, or run production or market-facing workloads.
+
+## Boundaries
+
+- **No live execution by default**: Treat content as archival unless the user clearly limits the task to safe, local editorial work.
+- **No secrets**: Do not solicit, reconstruct, or normalize credentials from history, logs, or export-like paths.
+- **Honor exclusions**: Data, logs, environment files, binaries, and exports are outside routine scope; do not try to repopulate, execute, or mine them without explicit user instruction.
+
+## Interpretation
+
+Present historical material with archival framing; do not assert current market fact, performance, or risk from preserved artifacts alone.

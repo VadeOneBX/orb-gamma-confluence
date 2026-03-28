@@ -1,0 +1,485 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © VadeOne1
+
+//@version=6
+indicator("ORB GEX Hostage Dashboard v7.4", overlay=true, max_labels_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS — MANUAL GEX HOSTAGE
+// ═══════════════════════════════════════════════════════════════════════════════
+groupGEX = "GEX Hostage (Manual)"
+gex_regime = input.string("NEUTRAL", "GEX Regime", options=["NEG", "POS", "NEUTRAL"], group=groupGEX)
+gex_conf   = input.int(6, "GEX Confidence (0–10)", minval=0, maxval=10, group=groupGEX)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS — UW ALERT TOGGLES (Manual, No API)
+// ═══════════════════════════════════════════════════════════════════════════════
+groupUW = "Unusual Whales (Manual Toggles)"
+uw_A1  = input.bool(false, "A1 Opening Thrust fired", group=groupUW)
+uw_FA1 = input.bool(false, "FA1 Opening Flow fired", group=groupUW)
+uw_B1  = input.bool(false, "B1 Winner Distribution fired", group=groupUW)
+uw_FB2 = input.bool(false, "FB2 Put Panic fired", group=groupUW)
+uw_NF1 = input.bool(false, "NF1 Risk-Off fired", group=groupUW)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS — ORB CONTEXT
+// ═══════════════════════════════════════════════════════════════════════════════
+groupORB = "ORB Context"
+or_minutes     = input.int(30, "OR Minutes", minval=15, maxval=60, group=groupORB)
+orb_hold_bars  = input.int(2, "ORB Hold Bars (confirm)", minval=1, maxval=5, group=groupORB)
+orb_use_vwap   = input.bool(true, "ORB Hold requires VWAP alignment", group=groupORB)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS — Display
+// ═══════════════════════════════════════════════════════════════════════════════
+groupUI = "Display"
+dashboard_size = input.string("Tiny", "Dashboard Size", options=["Tiny", "Small", "Normal", "Large"], group=groupUI)
+text_size = dashboard_size == "Tiny" ? size.tiny : dashboard_size == "Small" ? size.small : dashboard_size == "Large" ? size.large : size.normal
+
+getSize(sizeStr) =>
+    switch sizeStr
+        "Tiny"   => size.tiny
+        "Small"  => size.small
+        "Normal" => size.normal
+        "Large"  => size.large
+        "Huge"   => size.huge
+        => size.auto
+
+getLabelCoordinates(position, xOff, yOffATR, atrPad) =>
+    int rightEdge = bar_index + 1
+    int x = na
+    float y = na
+
+    // X coordinate (bars)
+    if position == "Top Left" or position == "Middle Left" or position == "Bottom Left"
+        x := bar_index - xOff
+    else if position == "Top Center" or position == "Middle Center" or position == "Bottom Center"
+        x := int(math.avg(bar_index, rightEdge))
+    else
+        x := rightEdge + xOff
+
+    // Y coordinate (ATR padded)
+    pad = ta.atr(14) * atrPad
+    if position == "Top Left" or position == "Top Center" or position == "Top Right"
+        y := high + pad + (ta.atr(14) * yOffATR)
+    else if position == "Middle Left" or position == "Middle Center" or position == "Middle Right"
+        y := math.avg(high, low) + (ta.atr(14) * yOffATR)
+    else
+        y := low - pad - (ta.atr(14) * yOffATR)
+
+    [x, y]
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS — Index Tiles
+// ═══════════════════════════════════════════════════════════════════════════════
+groupTiles = "Index Tiles"
+show_index_tiles = input.bool(true, "Show SPY/QQQ Mini Tiles", group=groupTiles)
+index_tile_size  = input.string("Tiny", "Index Tile Size", options=["Tiny","Small","Normal","Large"], group=groupTiles)
+
+spy_sym = input.symbol("AMEX:SPY", "SPY Symbol", group=groupTiles)
+qqq_sym = input.symbol("NASDAQ:QQQ", "QQQ Symbol", group=groupTiles)
+
+// Tile behavior
+auto_stack_tiles = input.bool(true, "Auto-stack SPY/QQQ when same position", group=groupTiles)
+hide_tiles_outside_rth = input.bool(true, "Hide Tiles Outside RTH", group=groupTiles)
+compact_tiles = input.bool(false, "Compact Tile Mode (1-line)", group=groupTiles)
+
+// SPY Tile Position
+spyPos      = input.string("Top Left", "SPY Tile Position", options=["Top Left","Top Center","Top Right","Middle Left","Middle Center","Middle Right","Bottom Left","Bottom Center","Bottom Right"], group=groupTiles)
+spyXOffset  = input.int(0, "SPY X Offset (bars)", group=groupTiles)
+spyYOffset  = input.int(0, "SPY Y Offset (ATR units)", group=groupTiles)
+
+// QQQ Tile Position
+qqqPos      = input.string("Top Left", "QQQ Tile Position", options=["Top Left","Top Center","Top Right","Middle Left","Middle Center","Middle Right","Bottom Left","Bottom Center","Bottom Right"], group=groupTiles)
+qqqXOffset  = input.int(0, "QQQ X Offset (bars)", group=groupTiles)
+qqqYOffset  = input.int(0, "QQQ Y Offset (ATR units)", group=groupTiles)
+
+tileATRMult = input.float(2.0, "Tile Padding (ATR)", minval=0.5, step=0.5, group=groupTiles)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIME CONTEXT (Replay-safe: no timenow)
+// ═══════════════════════════════════════════════════════════════════════════════
+sess = input.session("0930-1600", "Session")
+in_session = not na(time(timeframe.period, sess))
+
+var int sess_open_time = na
+is_new_day = ta.change(time("D")) != 0
+is_first_sess_bar = in_session and not in_session[1]
+
+if is_new_day
+    sess_open_time := na
+if is_first_sess_bar
+    sess_open_time := time
+
+minutes_from_open = (in_session and not na(sess_open_time)) ? (time - sess_open_time) / 60000 : na
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VWAP STRENGTH (optional context only)
+// ═══════════════════════════════════════════════════════════════════════════════
+vwap_now    = ta.vwap(close)
+vwap_dist   = vwap_now != 0 ? ((close - vwap_now) / vwap_now) * 100 : 0.0
+strong_vwap = math.abs(vwap_dist) > 0.5
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REPLAY-STABLE ORB STATE MACHINE (for use inside request.security per symbol)
+// Returns: orh, orl, or_complete, holds, failed, dirTxt
+// ═══════════════════════════════════════════════════════════════════════════════
+f_orb_state(_or_minutes, _hold_bars, _use_vwap) =>
+    rthSess = "0930-1600"
+    in_sess = not na(time(timeframe.period, rthSess))
+    is_new  = ta.change(time("D")) != 0
+
+    var float orh = na
+    var float orl = na
+    var bool  or_complete = false
+    var int   bars_in_or = 0
+
+    var int   hold_count = 0
+    var int   last_break_dir = 0   // +1 long, -1 short, 0 none
+    var int   break_bars_ago = na
+
+    if is_new
+        orh := na
+        orl := na
+        or_complete := false
+        bars_in_or := 0
+        hold_count := 0
+        last_break_dir := 0
+        break_bars_ago := na
+
+    is_first = in_sess and not in_sess[1]
+    if is_first
+        orh := high
+        orl := low
+        or_complete := false
+        bars_in_or := 0
+        hold_count := 0
+        last_break_dir := 0
+        break_bars_ago := na
+
+    if in_sess and not or_complete
+        bars_in_or += 1
+        mins_elapsed = bars_in_or * timeframe.in_seconds(timeframe.period) / 60.0
+
+        if mins_elapsed < _or_minutes
+            orh := math.max(orh, high)
+            orl := math.min(orl, low)
+        else
+            or_complete := true
+
+    v = ta.vwap(close)
+    vwap_ok_long  = (not _use_vwap) or close > v
+    vwap_ok_short = (not _use_vwap) or close < v
+
+    above_or  = or_complete and not na(orh) and close > orh
+    below_or  = or_complete and not na(orl) and close < orl
+    inside_or = or_complete and not above_or and not below_or
+
+    break_bars_ago := na(break_bars_ago) ? na : break_bars_ago
+    if or_complete
+        if (above_or and last_break_dir != 1)
+            last_break_dir := 1
+            hold_count := 0
+            break_bars_ago := 0
+        else if (below_or and last_break_dir != -1)
+            last_break_dir := -1
+            hold_count := 0
+            break_bars_ago := 0
+        else if not na(break_bars_ago)
+            break_bars_ago += 1
+
+    if or_complete
+        if last_break_dir == 1
+            if close > orh and vwap_ok_long
+                hold_count += 1
+            else
+                hold_count := 0
+        else if last_break_dir == -1
+            if close < orl and vwap_ok_short
+                hold_count += 1
+            else
+                hold_count := 0
+        else
+            hold_count := 0
+
+    holds = or_complete and hold_count >= _hold_bars
+
+    failed = or_complete and inside_or and not na(break_bars_ago) and break_bars_ago <= _hold_bars and (last_break_dir != 0) and not holds
+
+    dirTxt = holds and last_break_dir == 1 ? "UP" :
+             holds and last_break_dir == -1 ? "DOWN" :
+             (last_break_dir == 1 and above_or) ? "TRY UP" :
+             (last_break_dir == -1 and below_or) ? "TRY DN" : "—"
+
+    [orh, orl, or_complete, holds, failed, dirTxt]
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INDEX DATA (Replay-safe via request.security)
+// ═══════════════════════════════════════════════════════════════════════════════
+spy_close = request.security(spy_sym, timeframe.period, close)
+
+// Replay fix: if the chart symbol is SPY, compute VWAP locally (more reliable in replay)
+is_chart_spy = syminfo.tickerid == spy_sym
+spy_vwap = is_chart_spy ? ta.vwap(close) : request.security(spy_sym, timeframe.period, ta.vwap(close))
+spy_openD = request.security(spy_sym, "D", open)
+spy_chg   = spy_openD != 0 ? (spy_close - spy_openD) / spy_openD * 100 : na
+spy_abv   = spy_close > spy_vwap
+spy_vdist = spy_vwap != 0 ? ((spy_close - spy_vwap) / spy_vwap) * 100 : 0.0
+spy_str_v = math.abs(spy_vdist) > 0.5
+
+qqq_close = request.security(qqq_sym, timeframe.period, close)
+qqq_vwap  = request.security(qqq_sym, timeframe.period, ta.vwap(close))
+qqq_openD = request.security(qqq_sym, "D", open)
+qqq_chg   = qqq_openD != 0 ? (qqq_close - qqq_openD) / qqq_openD * 100 : na
+qqq_abv   = qqq_close > qqq_vwap
+qqq_vdist = qqq_vwap != 0 ? ((qqq_close - qqq_vwap) / qqq_vwap) * 100 : 0.0
+qqq_str_v = math.abs(qqq_vdist) > 0.5
+
+[spy_orh, spy_orl, spy_or_complete, spy_or_holds, spy_or_failed, spy_or_dir] = request.security(spy_sym, timeframe.period, f_orb_state(or_minutes, orb_hold_bars, orb_use_vwap))
+
+[qqq_orh, qqq_orl, qqq_or_complete, qqq_or_holds, qqq_or_failed, qqq_or_dir] = request.security(qqq_sym, timeframe.period, f_orb_state(or_minutes, orb_hold_bars, orb_use_vwap))
+
+// ORB FAIL visibility (soft fail label only)
+// Visual-only soft fail (does NOT affect scoring). Helps replay clarity.
+spy_failed_soft = spy_or_complete and not spy_or_holds and (
+     (spy_or_dir == "TRY UP" and spy_close < spy_orh) or
+     (spy_or_dir == "TRY DN" and spy_close > spy_orl)
+)
+
+qqq_failed_soft = qqq_or_complete and not qqq_or_holds and (
+     (qqq_or_dir == "TRY UP" and qqq_close < qqq_orh) or
+     (qqq_or_dir == "TRY DN" and qqq_close > qqq_orl)
+)
+
+spy_orb_txt = spy_or_holds ? ("ORB HOLDS " + spy_or_dir) :
+              spy_or_failed ? ("ORB FAILED " + spy_or_dir) :
+              spy_failed_soft ? ("ORB FAIL? " + spy_or_dir) :
+              spy_or_complete ? ("ORB SET " + spy_or_dir) : "ORB BUILD"
+
+qqq_orb_txt = qqq_or_holds ? ("ORB HOLDS " + qqq_or_dir) :
+              qqq_or_failed ? ("ORB FAILED " + qqq_or_dir) :
+              qqq_failed_soft ? ("ORB FAIL? " + qqq_or_dir) :
+              qqq_or_complete ? ("ORB SET " + qqq_or_dir) : "ORB BUILD"
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// A + C GEX REGIME ENGINE (OBVIOUS)
+// ═══════════════════════════════════════════════════════════════════════════════
+groupAuto = "GEX Regime (A + C Auto)"
+regime_mode = input.string("HYBRID", "Regime Mode", options=["MANUAL", "AUTO", "HYBRID"], group=groupAuto)
+min_diff_for_regime = input.int(4, "Min Score Diff", minval=2, maxval=8, group=groupAuto)
+
+// Option A inputs (manual checkpoints)
+pm_skew = input.string("NONE", "Premarket Skew", options=["CALLS_1.5X", "PUTS_1.5X", "NONE"], group=groupAuto)
+iv_behavior = input.string("FLAT", "IV vs Price", options=["IV_UP_UNSTABLE", "IV_DOWN_STABLE", "FLAT"], group=groupAuto)
+pin_smell = input.string("NONE", "Pin / Expand", options=["PIN_POS", "EXPAND_NEG", "NONE"], group=groupAuto)
+
+// Composite ORB flags
+any_holds  = spy_or_holds or qqq_or_holds
+both_holds = spy_or_holds and qqq_or_holds
+any_failed = spy_or_failed or qqq_or_failed
+
+// Mutual exclusivity (prevents double counting)
+holds_valid  = any_holds and not any_failed
+failed_valid = any_failed and not any_holds
+
+// C SIDE scoring (UW toggles + ORB reaction)
+int c_neg = 0
+int c_pos = 0
+
+c_neg += uw_FA1 ? 2 : 0
+c_neg += uw_A1  ? 3 : 0
+c_neg += holds_valid ? (both_holds ? 3 : 2) : 0
+
+c_pos += uw_FB2 ? 3 : 0
+c_pos += uw_B1  ? 3 : 0
+c_pos += failed_valid ? 3 : 0
+
+// A SIDE scoring (obvious checkpoints)
+int a_neg = 0
+int a_pos = 0
+
+a_neg += pm_skew == "CALLS_1.5X" ? 2 : 0
+a_pos += pm_skew == "PUTS_1.5X"  ? 2 : 0
+
+a_neg += iv_behavior == "IV_UP_UNSTABLE" ? 2 : 0
+a_pos += iv_behavior == "IV_DOWN_STABLE" ? 2 : 0
+
+a_pos += pin_smell == "PIN_POS"    ? 2 : 0
+a_neg += pin_smell == "EXPAND_NEG" ? 2 : 0
+
+// Combine
+score_neg = a_neg + c_neg
+score_pos = a_pos + c_pos
+score_net = score_neg - score_pos
+
+// Auto regime + confidence (0–10)
+string auto_regime = "NEUTRAL"
+int auto_conf = 6
+
+if uw_NF1
+    auto_regime := "NEUTRAL"
+    auto_conf := 10
+else
+    if score_net >= min_diff_for_regime
+        auto_regime := "NEG"
+        auto_conf := math.min(10, 6 + math.abs(score_net))
+    else if score_net <= -min_diff_for_regime
+        auto_regime := "POS"
+        auto_conf := math.min(10, 6 + math.abs(score_net))
+    else
+        auto_regime := "NEUTRAL"
+        auto_conf := 6
+
+// Output selection
+string gex_regime_out = gex_regime
+int gex_conf_out = gex_conf
+
+if regime_mode == "AUTO"
+    gex_regime_out := auto_regime
+    gex_conf_out := auto_conf
+else if regime_mode == "HYBRID"
+    bool strong = (auto_conf >= 8) and (auto_regime == "NEG" or auto_regime == "POS")
+    gex_regime_out := strong ? auto_regime : "NEUTRAL"
+    gex_conf_out := strong ? auto_conf : 6
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REGIME COLORS / OUTPUTS (now based on gex_regime_out / gex_conf_out)
+// ═══════════════════════════════════════════════════════════════════════════════
+gex_bias =
+     gex_regime_out == "NEG" ? -1 :
+     gex_regime_out == "POS" ?  1 : 0
+
+gex_color =
+     gex_bias == -1 ? color.new(color.red, 0) :
+     gex_bias ==  1 ? color.new(color.green, 0) :
+                      color.new(color.gray, 0)
+
+allowed_recipes =
+     gex_regime_out == "NEG" ? "A1 · FLEX · ALT-2 · ALT-4 · ALT-5" :
+     gex_regime_out == "POS" ? "ALT-1 · ALT-3 · ALT-5" :
+                               "ALT-1 (½) · ALT-5 (cautious)"
+
+flip_risk =
+     gex_conf_out <= 3  ? "HIGH" :
+     gex_conf_out <= 6  ? "MED"  :
+                          "LOW"
+
+flip_color =
+     flip_risk == "HIGH" ? color.new(color.red, 0) :
+     flip_risk == "MED"  ? color.new(color.orange, 0) :
+                           color.new(color.lime, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD TABLE (Main)
+// ═══════════════════════════════════════════════════════════════════════════════
+if barstate.islast
+    var table dash = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 85), border_width=1)
+
+    table.cell(dash, 0, 0, "HOSTAGE STATUS", bgcolor=color.new(color.blue, 60), text_size=text_size)
+    table.cell(dash, 1, 0, syminfo.ticker, bgcolor=color.new(color.blue, 60), text_size=text_size)
+
+    table.cell(dash, 0, 1, "GEX Regime", text_size=text_size)
+    table.cell(dash, 1, 1, gex_regime_out, text_color=gex_color, text_size=text_size)
+
+    table.cell(dash, 0, 2, "GEX Confidence", text_size=text_size)
+    table.cell(dash, 1, 2, str.tostring(gex_conf_out) + " / 10", text_color=gex_color, text_size=text_size)
+
+    table.cell(dash, 0, 3, "Allowed Plays", text_size=text_size)
+    table.cell(dash, 1, 3, allowed_recipes, text_size=text_size)
+
+    table.cell(dash, 0, 4, "Flip Risk", text_size=text_size)
+    table.cell(dash, 1, 4, flip_risk, text_color=flip_color, text_size=text_size)
+
+    mfotxt = na(minutes_from_open) ? "—" : str.tostring(int(minutes_from_open)) + "m"
+    table.cell(dash, 0, 5, "Minutes Since Open", text_size=text_size)
+    table.cell(dash, 1, 5, mfotxt, text_size=text_size)
+
+    dte_gate = (not na(minutes_from_open)) and minutes_from_open > 90
+    dte_status = dte_gate ? "NO NEW 0DTE" : "0DTE OK"
+    dte_color  = dte_gate ? color.red : color.lime
+    table.cell(dash, 0, 6, "0DTE Gate", text_size=text_size)
+    table.cell(dash, 1, 6, dte_status, text_color=dte_color, text_size=text_size)
+
+    exec_mode = gex_regime_out == "NEG" ? "MOMENTUM" : gex_regime_out == "POS" ? "REVERSION" : "WAIT / CONFIRM"
+    table.cell(dash, 0, 7, "Execution Mode", text_size=text_size)
+    table.cell(dash, 1, 7, exec_mode, text_color=gex_color, text_size=text_size)
+
+    mantra = gex_regime_out == "NEG" ? "DON’T FADE STRENGTH" : gex_regime_out == "POS" ? "LET IT FAIL FIRST" : "PATIENCE > ACTION"
+    table.cell(dash, 0, 8, "Rule", text_size=text_size)
+    table.cell(dash, 1, 8, mantra, text_size=text_size)
+
+    // Score panel (A+C)
+    table.cell(dash, 0, 9, "Score (NEG/POS)", text_size=text_size)
+    table.cell(dash, 1, 9, str.tostring(score_neg) + " / " + str.tostring(score_pos), text_size=text_size)
+
+    table.cell(dash, 0, 10, "Net / Mode", text_size=text_size)
+    table.cell(dash, 1, 10, str.tostring(score_net) + " / " + regime_mode, text_size=text_size)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LABEL TILES (Crispy HUD) — SPY / QQQ (Pine-safe: no multiline ternary)
+// ═══════════════════════════════════════════════════════════════════════════════
+tileSize = getSize(index_tile_size)
+
+show_tiles_now = show_index_tiles and (not hide_tiles_outside_rth or in_session)
+
+// Auto-stack QQQ under SPY if same anchor
+stackYOffset = (auto_stack_tiles and spyPos == qqqPos) ? 3 : 0
+spyYOffset_final = spyYOffset
+qqqYOffset_final = qqqYOffset + stackYOffset
+
+string spyText = ""
+string qqqText = ""
+
+if compact_tiles
+    spyText := "SPY | " + gex_regime_out + " | " + spy_orb_txt + " | " + (spy_abv ? "VWAP↑" : "VWAP↓") + " | " + str.tostring(spy_chg, "#.##") + "%"
+    qqqText := "QQQ | " + gex_regime_out + " | " + qqq_orb_txt + " | " + (qqq_abv ? "VWAP↑" : "VWAP↓") + " | " + str.tostring(qqq_chg, "#.##") + "%"
+else
+    spyText := "SPY\n" +
+      "Regime: " + gex_regime_out + "\n" +
+      "ORB: " + spy_orb_txt + "\n" +
+      "VWAP: " + (spy_abv ? (spy_str_v ? "Above STR" : "Above") : (spy_str_v ? "Below STR" : "Below")) + "\n" +
+      "Chg: " + str.tostring(spy_chg, "#.##") + "%"
+
+    qqqText := "QQQ\n" +
+      "Regime: " + gex_regime_out + "\n" +
+      "ORB: " + qqq_orb_txt + "\n" +
+      "VWAP: " + (qqq_abv ? (qqq_str_v ? "Above STR" : "Above") : (qqq_str_v ? "Below STR" : "Below")) + "\n" +
+      "Chg: " + str.tostring(qqq_chg, "#.##") + "%"
+
+spyBg = color.new(color.blue, 70)
+qqqBg = color.new(color.purple, 70)
+
+var label spyLbl = na
+var label qqqLbl = na
+
+if show_tiles_now
+    [sx, sy] = getLabelCoordinates(spyPos, spyXOffset, spyYOffset_final, tileATRMult)
+    [qx, qy] = getLabelCoordinates(qqqPos, qqqXOffset, qqqYOffset_final, tileATRMult)
+
+    if na(spyLbl)
+        spyLbl := label.new(sx, sy, spyText, style=label.style_label_left, color=spyBg, textcolor=color.white, size=tileSize)
+    else
+        label.set_x(spyLbl, sx)
+        label.set_y(spyLbl, sy)
+        label.set_text(spyLbl, spyText)
+        label.set_color(spyLbl, spyBg)
+        label.set_textcolor(spyLbl, color.white)
+        label.set_size(spyLbl, tileSize)
+
+    if na(qqqLbl)
+        qqqLbl := label.new(qx, qy, qqqText, style=label.style_label_left, color=qqqBg, textcolor=color.white, size=tileSize)
+    else
+        label.set_x(qqqLbl, qx)
+        label.set_y(qqqLbl, qy)
+        label.set_text(qqqLbl, qqqText)
+        label.set_color(qqqLbl, qqqBg)
+        label.set_textcolor(qqqLbl, color.white)
+        label.set_size(qqqLbl, tileSize)
+else
+    // Delete stale tiles when hidden (prevents "duplicates")
+    if not na(spyLbl)
+        label.delete(spyLbl)
+        spyLbl := na
+    if not na(qqqLbl)
+        label.delete(qqqLbl)
+        qqqLbl := na

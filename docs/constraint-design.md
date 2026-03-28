@@ -1,25 +1,25 @@
 # Constraint design
 
-## Role of constraints
+## What shapes the visible read
 
-**Constraints**—thresholds, filters, inclusion rules, and gating logic—function here as **design variables**. They carve the raw field into **emphasis patterns**: what counts as salient, what is suppressed, and what remains visible only in drill-down.
+Named groups in **`GEX_Hostage_Dashboard.pine.txt`** steer **HOSTAGE STATUS** and **SPY/QQQ** tiles: **ORB Context** (opening window, **ORB Hold** confirmation, optional **VWAP alignment** on holds), **session**, **GEX Hostage (Manual)**, **Unusual Whales (Manual Toggles)**, **Display**, **Index Tiles** (positions, stacking, **RTH** hide, compact mode), and **Regime Mode**. They are **design choices** on the chart: they change **which ORB wording and regime labels appear**, not off-chart “edges.”
 
-They are **not** documented as **validated edges**. A constraint may have been **motivated** by empirical observation in a historical window; in this artifact it is preserved as a **parameter of the dashboard’s geometry**, not as a proof of future performance or risk control.
+## ORB validity and the C-side read
 
-## Design space, not boundary proofs
+**Composite holds** and **composite failed** are **not double-counted** toward **C-side** scoring when both would fire—conflicting ORB headlines cannot **both** increment the same side. That convention is part of the **artifact’s scoring posture**, not a market theorem.
 
-Each constraint implies a **family** of dashboards: loosen the gate, and more events surface; tighten it, and the narrative simplifies at the cost of breadth. The research treated that tradeoff as **central**. The preserved work is therefore best read as a **point in a design space**, with neighboring points left unexplored or deliberately discarded.
+## One cut among neighbors
 
-## Interaction with confluence
+Combinations such as **VWAP alignment** on holds or MANUAL vs AUTO vs HYBRID imply other dashboards the file could have been; this repository holds **one preserved version**.
 
-Confluence scoring sits **downstream** of constraints. Constraints determine **which observations enter** the composite and **how conflicts are resolved** when signals disagree. That ordering matters: confluence is **not independent** of the constraint sheet; it is **conditional** on it.
+## Confluence surface dependence
 
-Readers should avoid interpreting any confluence state as **intrinsic** to the market. It is **intrinsic to the chosen constraint set** applied to a historical record.
+**A-side** checkpoints and **C-side** toggles meet in **Score (NEG/POS)** and **Net / Mode**; **GEX Regime** / **GEX Confidence** reflect that meeting under **Regime Mode**. The **confluence surface** is always **bound to those inputs**.
 
-## Regime and constraints
+## Regime context
 
-Some constraints may be **regime-aware** in intent: different gates for different volatility or liquidity contexts. Even then, the regime partition is a **modeling choice**. It organizes interpretation; it does not close the question of what regime the **current** environment represents.
+**NF1** and related toggles show how **regime context** can **flatten or soften** what the auto branch would print. Treat that as **behavior recorded in the artifact**, not guidance outside it.
 
-## Exclusions
+## Scope
 
-This document does not prescribe implementation details, execution policies, broker rules, or automation. It addresses **why constraints existed in the research** and **how to read them**—as levers in a composed view—not as operational mandates.
+Stays with the **preserved dashboard**; not a memo for anything beyond it.

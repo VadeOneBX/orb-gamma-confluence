@@ -1,32 +1,27 @@
 # System architecture (conceptual)
 
-## Layered view
+## What the artifact shows
 
-The dashboard can be read as a **small stack of intentions**, not as a deployment diagram.
+**HOSTAGE STATUS** (main table) carries **GEX Regime**, **GEX Confidence**, **Allowed Plays**, **Flip Risk**, **Minutes Since Open**, **0DTE Gate**, **Score (NEG/POS)**, **Net / Mode**, and caption rows named on the overlay (including **Execution Mode** and **Rule**).
 
-1. **Representation layer**  
-   Canonical charts, tables, and annotations arrange raw and derived quantities so they can be scanned in one sitting. Layout encodes priority: what must be visible first, what is secondary, what is diagnostic rather than primary.
+**SPY/QQQ index tiles** (optional, compact or multi-line) repeat **GEX Regime**, **ORB** status text, **VWAP** **Above** / **Below** (with **STR** where used), and session **change** copy—so **opening range structure** and **VWAP relationship** sit beside **GEX regime** without merging those axes.
 
-2. **Synthesis layer**  
-   Derived fields combine inputs into summaries—often labeled as confluence or agreement-style constructs. This layer is where **multiple signals are folded into fewer states** for visual economy.
+## How the visible fields cohere
 
-3. **Parameter layer**  
-   Constraints, windows, and classification rules sit **behind** the synthesis layer. They are **explicit levers**: changing them changes what the dashboard emphasizes without necessarily changing the underlying data source semantics.
+**GEX Regime**, **GEX Confidence**, **Score (NEG/POS)**, and **Net / Mode** are the table’s **confluence surface**: one **composite read** that draws, when needed, on **A-side** checkpoints (premarket skew, IV vs price, pin/expand) and **C-side** material (**Unusual Whales**-style toggles A1, FA1, B1, FB2, NF1, plus **composite ORB** holds/failed handling), under **Regime Mode** (MANUAL, AUTO, HYBRID).
 
-There is no claim here that these layers map one-to-one to a particular technology stack. The architecture is **logical**: it describes how the preserved dashboard **thinks**, not how it was hosted or executed.
+## Opening range structure and VWAP on the chart
 
-## Dashboard as the fixed point
+Tile **ORB** lines express **opening range structure** in dashboard vernacular (**ORB BUILD**, **ORB SET**, **ORB HOLDS**, **ORB FAILED**, **ORB FAIL?**, **TRY UP** / **TRY DN**, etc.). **VWAP relationship** appears on the same tiles and, when the relevant option is on, can condition how **ORB hold** status is drawn.
 
-Across iterations of the research, the dashboard remained the **stable object**. Experiments in scoring or constraint tuning were judged by whether they **clarified or obscured** that surface. The narrative therefore treats the dashboard as the **integration boundary**: the place where design decisions become visible and debatable.
+## Regime context
 
-## Data and environment (non-operational)
+**GEX Regime** must be read with **session phase**, **RTH** tile visibility, and the active **Regime Mode** branch in mind (including **NF1** neutralizing the auto read). Those shifts are **context on the saved dashboard**, not a universal classification scheme.
 
-The work assumed **historical** data and **offline** interpretation. The architecture does not prescribe how data enters the system today; it describes **what classes of information** the dashboard was built to hold in relation—opening structure, gamma-related constructs, and confluence-style composites—without binding to a provider or pipeline.
+## Fixed point
 
-## Regime in the architecture
-
-Regime appears as **conditional interpretation**: the same composite may read differently when volatility, session phase, or microstructure context shifts. Architecturally, regime is **metadata for reading**, not a separate trading engine. It informs **how** to narrate a panel, not **what** must be executed.
+The thread treated **HOSTAGE STATUS** plus **SPY/QQQ** tiles as the **stable object**; other material in the file exists chiefly to **populate those readings**.
 
 ## Boundary
 
-This document stops at **conceptual structure**. It does not specify execution paths, connectivity, automation, or deployment. Those concerns were outside the preserved design story.
+This note stops at **what is visible and how to read it archivally**.

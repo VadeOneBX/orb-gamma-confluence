@@ -1,6 +1,11 @@
-# Orb–gamma confluence (historical research artifact)
+# ORB + Gamma Confluence Dashboard
 
-This repository preserves a **dashboard-centered research thread** whose durable object is the **ORB GEX Hostage Dashboard** overlay in **`pinescript/GEX_Hostage_Dashboard.pine.txt`**: a **HOSTAGE STATUS** table and **SPY/QQQ** tiles that hold **opening range structure**, **VWAP relationship**, and **GEX regime** in one view—read **historically**, not as instruction for the present.
+![Artifact](https://img.shields.io/badge/status-research--artifact-blue)
+![Pine](https://img.shields.io/badge/platform-TradingView%20Pine-orange)
+![Scope](https://img.shields.io/badge/scope-dashboard--surface-lightgrey)
+![Focus](https://img.shields.io/badge/focus-structure%20%7C%20VWAP%20%7C%20gamma-black)
+
+Historical dashboard artifact exploring how opening range structure, VWAP relationship, and gamma regime context were rendered into a bounded interpretive surface.
 
 ## What is preserved
 

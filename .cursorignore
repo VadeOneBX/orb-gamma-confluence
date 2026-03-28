@@ -1,0 +1,23 @@
+# Historical research artifact — keep payloads out of AI context
+# Scope: data, logs, environments, binaries, exports (no Docker/Python/MCP/broker/infra tooling entries)
+
+data/
+logs/
+**/*.log
+
+.env
+.env.*
+
+exports/
+export/
+
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+
+*.zip
+*.tar
+*.tar.gz
+*.7z

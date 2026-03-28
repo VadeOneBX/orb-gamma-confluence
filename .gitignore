@@ -24,3 +24,8 @@ export/
 *.tar
 *.tar.gz
 *.7z
+
+# Cursor
+.cursorrules
+.cursor/
+.cursorignore
